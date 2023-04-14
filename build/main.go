@@ -77,15 +77,15 @@ func main() {
 	}
 	fmt.Println(outb.String())
 
-	// revert code and files
-	err = ioutil.WriteFile(packageCmdPath+"/root.go", rootCode, os.ModePerm)
-	if err != nil {
-		log.Println(err)
-	}
-	for _, provider := range deletedProvider {
-		err := os.Rename(packageCmdPath+"/tmp/"+filePrefix+provider+fileSuffix, "cmd/"+filePrefix+provider+fileSuffix)
-		if err != nil {
-			log.Println(err)
-		}
-	}
+	// // revert code and files
+	// err = ioutil.WriteFile(packageCmdPath+"/root.go", rootCode, os.ModePerm)
+	// if err != nil {
+	// 	log.Println(err)
+	// }
+	// for _, provider := range deletedProvider {
+	// 	err := os.Rename(packageCmdPath+"/tmp/"+filePrefix+provider+fileSuffix, "cmd/"+filePrefix+provider+fileSuffix)
+	// 	if err != nil {
+	// 		log.Println(err)
+	// 	}
+	// }
 }
