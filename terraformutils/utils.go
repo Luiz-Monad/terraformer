@@ -16,11 +16,14 @@ package terraformutils
 
 import (
 	"bytes"
+	"encoding/json"
+	"fmt"
+	"io"
 	"log"
 
 	"github.com/GoogleCloudPlatform/terraformer/terraformutils/providerwrapper"
 
-	"github.com/hashicorp/terraform/terraform"
+	"github.com/hashicorp/terraform-plugin-sdk/v2/terraform"
 )
 
 type BaseResource struct {
@@ -29,8 +32,8 @@ type BaseResource struct {
 
 func NewTfState(resources []Resource) *terraform.State {
 	tfstate := &terraform.State{
-		Version:   terraform.StateVersion,
-		TFVersion: terraform.VersionString(), //nolint
+		Version:   3, //internal/legacy/terraform/state.go
+		TFVersion: "v1.0.0",
 		Serial:    1,
 	}
 	outputs := map[string]*terraform.OutputState{}
@@ -60,7 +63,7 @@ func NewTfState(resources []Resource) *terraform.State {
 func PrintTfState(resources []Resource) ([]byte, error) {
 	state := NewTfState(resources)
 	var buf bytes.Buffer
-	err := terraform.WriteState(state, &buf)
+	err := writeState(state, &buf)
 	return buf.Bytes(), err
 }
 
@@ -196,4 +199,52 @@ func ContainsResource(s []Resource, e Resource) bool {
 		}
 	}
 	return false
+}
+
+// WriteState writes a state somewhere in a binary format.
+// from internal\legacy\terraform\state.go
+func writeState(d *terraform.State, dst io.Writer) error {
+	// writing a nil state is a noop.
+	if d == nil {
+		return nil
+	}
+
+	// make sure we have no uninitialized fields
+	// d.init()
+
+	// Make sure it is sorted
+	// d.sort()
+
+	// Ensure the version is set
+	d.Version = 3 //internal/legacy/terraform/state.go
+
+	// If the TFVersion is set, verify it. We used to just set the version
+	// here, but this isn't safe since it changes the MD5 sum on some remote
+	// state storage backends such as Atlas. We now leave it be if needed.
+	if d.TFVersion != "" {
+		d.TFVersion = "v1.0.0"
+		// if _, err := version.NewVersion(d.TFVersion); err != nil {
+		// 	return fmt.Errorf(
+		// 		"Error writing state, invalid version: %s\n\n"+
+		// 			"The Terraform version when writing the state must be a semantic\n"+
+		// 			"version.",
+		// 		d.TFVersion)
+		// }
+	}
+
+	// Encode the data in a human-friendly way
+	data, err := json.MarshalIndent(d, "", "    ")
+	if err != nil {
+		return fmt.Errorf("Failed to encode state: %s", err)
+	}
+
+	// We append a newline to the data because MarshalIndent doesn't
+	data = append(data, '\n')
+
+	// Write the data out to the dst
+	if _, err := io.Copy(dst, bytes.NewReader(data)); err != nil {
+		return fmt.Errorf("Failed to write state: %v", err)
+	}
+
+	return nil
 }

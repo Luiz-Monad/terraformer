@@ -15,7 +15,7 @@
 package terraformutils
 
 import (
-	"github.com/zclconf/go-cty/cty"
+	"github.com/hashicorp/go-cty/cty"
 )
 
 type ProviderGenerator interface {

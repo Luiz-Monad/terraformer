@@ -22,8 +22,8 @@ import (
 	"time"
 
 	"github.com/GoogleCloudPlatform/terraformer/terraformutils/providerwrapper"
-	"github.com/hashicorp/terraform/terraform"
-	"github.com/zclconf/go-cty/cty"
+	"github.com/hashicorp/go-cty/cty"
+	"github.com/hashicorp/terraform-plugin-sdk/v2/terraform"
 )
 
 type Resource struct {
@@ -171,8 +171,7 @@ func (r *Resource) ConvertTFstate(provider *providerwrapper.ProviderWrapper) err
 		}
 	}
 	parser := NewFlatmapParser(r.InstanceState.Attributes, ignoreKeys, allowEmptyValues)
-	schema := provider.GetSchema()
-	impliedType := schema.ResourceTypes[r.InstanceInfo.Type].Block.ImpliedType()
+	impliedType := r.InstanceState.RawState.Type()
 	return r.ParseTFstate(parser, impliedType)
 }
 

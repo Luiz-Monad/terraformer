@@ -4,50 +4,55 @@ import (
 	"regexp"
 	"testing"
 
-	"github.com/hashicorp/terraform/configs/configschema"
-	"github.com/zclconf/go-cty/cty"
+	"github.com/hashicorp/terraform-plugin-go/tfprotov5"
+	"github.com/hashicorp/terraform-plugin-go/tftypes"
 )
 
 func TestIgnoredAttributes(t *testing.T) {
-	attributes := map[string]*configschema.Attribute{
-		"computed_attribute": {
-			Type:     cty.Number,
+	attributes := []*tfprotov5.SchemaAttribute{
+		{
+			Name:     "computed_attribute",
+			Type:     tftypes.Number,
 			Computed: true,
 		},
-		"required_attribute": {
-			Type:     cty.String,
+		{
+			Name:     "required_attribute",
+			Type:     tftypes.String,
 			Required: true,
 		},
 	}
 
 	testCases := map[string]struct {
-		block                map[string]*configschema.NestedBlock
+		block                []*tfprotov5.SchemaNestedBlock
 		ignoredAttributes    []string
 		notIgnoredAttributes []string
 	}{
-		"nesting_set": {map[string]*configschema.NestedBlock{
-			"attribute_one": {
-				Block: configschema.Block{
+		"nesting_set": {[]*tfprotov5.SchemaNestedBlock{
+			{
+				TypeName: "attribute_one",
+				Block: &tfprotov5.SchemaBlock{
 					Attributes: attributes,
 				},
-				Nesting: configschema.NestingSet,
+				Nesting: tfprotov5.SchemaNestedBlockNestingModeSet,
 			},
 		}, []string{"nesting_set.attribute_one.computed_attribute"},
 			[]string{"nesting_set.attribute_one.required_attribute"}},
-		"nesting_list": {map[string]*configschema.NestedBlock{
-			"attribute_one": {
-				Block: configschema.Block{
-					Attributes: map[string]*configschema.Attribute{},
-					BlockTypes: map[string]*configschema.NestedBlock{
-						"attribute_two_nested": {
-							Nesting: configschema.NestingList,
-							Block: configschema.Block{
+		"nesting_list": {[]*tfprotov5.SchemaNestedBlock{
+			{
+				TypeName: "attribute_one",
+				Block: &tfprotov5.SchemaBlock{
+					Attributes: []*tfprotov5.SchemaAttribute{},
+					BlockTypes: []*tfprotov5.SchemaNestedBlock{
+						{
+							TypeName: "attribute_two_nested",
+							Nesting:  tfprotov5.SchemaNestedBlockNestingModeList,
+							Block: &tfprotov5.SchemaBlock{
 								Attributes: attributes,
 							},
 						},
 					},
 				},
-				Nesting: configschema.NestingList,
+				Nesting: tfprotov5.SchemaNestedBlockNestingModeList,
 			},
 		}, []string{"nesting_list.0.attribute_one.0.attribute_two_nested.computed_attribute"},
 			[]string{"nesting_list.0.attribute_one.0.attribute_two_nested.required_attribute"}},

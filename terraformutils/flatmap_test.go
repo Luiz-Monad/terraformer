@@ -4,7 +4,7 @@ import (
 	"regexp"
 	"testing"
 
-	"github.com/zclconf/go-cty/cty"
+	"github.com/hashicorp/go-cty/cty"
 )
 
 func TestNestedAttributeFiltering(t *testing.T) {
