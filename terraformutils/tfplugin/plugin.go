@@ -2,21 +2,20 @@ package tfplugin
 
 import (
 	"github.com/hashicorp/go-plugin"
-	"github.com/hashicorp/terraform-plugin-go/tfprotov5/tf5server"
 )
 
-// internal\plugin\plugin.go
+// terraform@v.1.4.5/internal/plugin/plugin.go
 
 // VersionedPlugins includes both protocol 5 and 6 because this is the function
 // called in providerFactory (command/meta_providers.go) to set up the initial
 // plugin client config.
 var VersionedPlugins = map[int]plugin.PluginSet{
 	5: {
-		"provider": &tf5server.GRPCProviderPlugin{},
+		ProviderPluginName: &GRPCProviderPlugin{},
 	},
 }
 
-// internal\plugin\serve.go
+// terraform@v.1.4.5/internal/plugin/serve.go
 
 const (
 	// The constants below are the names of the plugins that can be dispensed

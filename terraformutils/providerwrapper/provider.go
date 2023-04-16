@@ -34,7 +34,6 @@ import (
 	"github.com/hashicorp/go-plugin"
 	"github.com/hashicorp/terraform-plugin-go/tfprotov5"
 	"github.com/hashicorp/terraform-plugin-go/tftypes"
-	"github.com/hashicorp/terraform-plugin-sdk/v2/helper/schema"
 	"github.com/hashicorp/terraform-plugin-sdk/v2/terraform"
 )
 
@@ -50,8 +49,8 @@ const DefaultPluginVendorDirV12 = "terraform.d/plugins/" + pluginMachineName
 const pluginMachineName = runtime.GOOS + "_" + runtime.GOARCH
 
 type ProviderWrapper struct {
-	Context      context.Context
-	Provider     *schema.GRPCProviderServer
+	context      context.Context
+	provider     tfprotov5.ProviderServer
 	client       *plugin.Client
 	rpcClient    plugin.ClientProtocol
 	providerName string
@@ -88,7 +87,7 @@ func (p *ProviderWrapper) Kill() {
 
 func (p *ProviderWrapper) GetSchema() (*tfprotov5.GetProviderSchemaResponse, error) {
 	if p.schema == nil {
-		r, err := p.Provider.GetProviderSchema(p.Context, &tfprotov5.GetProviderSchemaRequest{})
+		r, err := p.provider.GetProviderSchema(p.context, &tfprotov5.GetProviderSchemaRequest{})
 		if err != nil {
 			return nil, err
 		}
@@ -182,7 +181,7 @@ func (p *ProviderWrapper) Refresh(info *terraform.InstanceInfo, state *terraform
 		if err != nil {
 			return nil, err
 		}
-		resp, err := p.Provider.ReadResource(p.Context, &tfprotov5.ReadResourceRequest{
+		resp, err := p.provider.ReadResource(p.context, &tfprotov5.ReadResourceRequest{
 			TypeName:     info.Type,
 			CurrentState: currentState,
 			Private:      []byte{},
@@ -203,7 +202,7 @@ func (p *ProviderWrapper) Refresh(info *terraform.InstanceInfo, state *terraform
 	if !successReadResource {
 		log.Println("Fail read resource from provider, trying import command")
 		// retry with regular import command - without resource attributes
-		importResponse, err := p.Provider.ImportResourceState(p.Context, &tfprotov5.ImportResourceStateRequest{
+		importResponse, err := p.provider.ImportResourceState(p.context, &tfprotov5.ImportResourceStateRequest{
 			TypeName: info.Type,
 			ID:       state.ID,
 		})
@@ -262,7 +261,8 @@ func (p *ProviderWrapper) initProvider(verbose bool) error {
 		return err
 	}
 
-	p.Provider = raw.(*schema.GRPCProviderServer)
+	p.provider = raw.(tfprotov5.ProviderServer)
+	p.context = raw.(tfplugin.ClientContext).Context()
 
 	schema, err := p.GetSchema()
 	if err != nil {
@@ -272,7 +272,7 @@ func (p *ProviderWrapper) initProvider(verbose bool) error {
 	if err != nil {
 		return err
 	}
-	p.Provider.ConfigureProvider(p.Context, &tfprotov5.ConfigureProviderRequest{
+	p.provider.ConfigureProvider(p.context, &tfprotov5.ConfigureProviderRequest{
 		TerraformVersion: "v1.0.0",
 		Config:           config,
 	})
