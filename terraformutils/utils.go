@@ -20,6 +20,7 @@ import (
 	"fmt"
 	"io"
 	"log"
+	"sync"
 
 	"github.com/GoogleCloudPlatform/terraformer/terraformutils/providerwrapper"
 
@@ -69,12 +70,34 @@ func PrintTfState(resources []Resource) ([]byte, error) {
 
 func RefreshResources(resources []*Resource, provider *providerwrapper.ProviderWrapper, slowProcessingResources [][]*Resource) ([]*Resource, error) {
 	refreshedResources := []*Resource{}
-	RefreshResourceWorker(resources, provider)
+	input := make(chan *Resource, len(resources))
+	var wg sync.WaitGroup
+	poolSize := 15
+	for i := range resources {
+		wg.Add(1)
+		input <- resources[i]
+	}
+	close(input)
 
-	for _, resourceGroup := range slowProcessingResources {
-		RefreshResourceWorker(resourceGroup, provider)
+	for i := 0; i < poolSize; i++ {
+		go RefreshResourceWorker(input, &wg, provider)
 	}
 
+	spInputs := []chan *Resource{}
+	for i, resourceGroup := range slowProcessingResources {
+		spInputs = append(spInputs, make(chan *Resource, len(resourceGroup)))
+		for j := range resourceGroup {
+			spInputs[i] <- resourceGroup[j]
+		}
+		close(spInputs[i])
+	}
+
+	for i := 0; i < len(spInputs); i++ {
+		wg.Add(len(slowProcessingResources[i]))
+		go RefreshResourceWorker(spInputs[i], &wg, provider)
+	}
+
+	wg.Wait()
 	for _, r := range resources {
 		if r.InstanceState != nil && r.InstanceState.ID != "" {
 			refreshedResources = append(refreshedResources, r)
@@ -127,10 +150,11 @@ func RefreshResourcesByProvider(providersMapping *ProvidersMapping, providerWrap
 	return nil
 }
 
-func RefreshResourceWorker(input []*Resource, provider *providerwrapper.ProviderWrapper) {
-	for _, r := range input {
+func RefreshResourceWorker(input chan *Resource, wg *sync.WaitGroup, provider *providerwrapper.ProviderWrapper) {
+	for r := range input {
 		log.Println("Refreshing state...", r.InstanceInfo.Id)
 		r.Refresh(provider)
+		wg.Done()
 	}
 }
 
