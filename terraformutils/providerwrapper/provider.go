@@ -178,9 +178,9 @@ func (p *ProviderWrapper) Refresh(info *terraform.InstanceInfo, state *terraform
 		return nil, err
 	}
 	successReadResource := false
-	resp := tfprotov5.ReadResourceResponse{}
+	var resp *tfprotov5.ReadResourceResponse
 	for i := 0; i < p.retryCount; i++ {
-		resp, err := p.provider.ReadResource(p.context, &tfprotov5.ReadResourceRequest{
+		resp, err = p.provider.ReadResource(p.context, &tfprotov5.ReadResourceRequest{
 			TypeName:     info.Type,
 			CurrentState: NewDynamicValue(priorState),
 			Private:      []byte{},
@@ -188,10 +188,15 @@ func (p *ProviderWrapper) Refresh(info *terraform.InstanceInfo, state *terraform
 		if err != nil {
 			log.Println(err)
 			log.Println(resp.Diagnostics)
-			log.Printf("WARN: Fail read resource from provider, wait %dms before retry\n", p.retrySleepMs)
+			log.Printf("WARN: Fail read resource from provider for resource %s, wait %dms before retry\n", info.Id, p.retrySleepMs)
 			time.Sleep(time.Duration(p.retrySleepMs) * time.Millisecond)
 			continue
 		} else {
+			if resp.NewState == nil {
+				log.Printf("WARN: Read resource response is null for resource %s, wait %dms before retry\n", info.Id, p.retrySleepMs)
+				time.Sleep(time.Duration(p.retrySleepMs) * time.Millisecond)
+				continue
+			}
 			successReadResource = true
 			break
 		}
@@ -275,6 +280,9 @@ func (p *ProviderWrapper) initProvider(verbose bool) error {
 	schema, err := p.GetSchema()
 	if err != nil {
 		return err
+	}
+	if p.config.IsNull() {
+		p.config = cty.EmptyObjectVal
 	}
 	config, err := configschema.WrapBlock(schema.Provider.Block).CoerceValue(p.config)
 	if err != nil {
