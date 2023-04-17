@@ -16,10 +16,12 @@ package providerwrapper //nolint
 
 import (
 	"context"
+	encjson "encoding/json"
 	"errors"
 	"fmt"
 	"io/ioutil"
 	"log"
+	"net"
 	"os"
 	"os/exec"
 	"runtime"
@@ -30,8 +32,8 @@ import (
 	"github.com/GoogleCloudPlatform/terraformer/terraformutils/tfplugin"
 	"github.com/GoogleCloudPlatform/terraformer/terraformutils/tfplugin/stoleninternal/configschema"
 	"github.com/hashicorp/go-cty/cty"
-	"github.com/hashicorp/go-cty/cty/msgpack"
 	"github.com/hashicorp/go-cty/cty/json"
+	"github.com/hashicorp/go-cty/cty/msgpack"
 	"github.com/hashicorp/go-hclog"
 	"github.com/hashicorp/go-plugin"
 	"github.com/hashicorp/terraform-plugin-go/tfprotov5"
@@ -226,8 +228,9 @@ func (p *ProviderWrapper) Refresh(info *terraform.InstanceInfo, state *terraform
 }
 
 func (p *ProviderWrapper) initProvider(verbose bool) error {
+	reattach := getReattachProviders()
 	providerFilePath, err := getProviderFileName(p.providerName)
-	if err != nil {
+	if err != nil && reattach == nil {
 		return err
 	}
 	options := hclog.LoggerOptions{
@@ -239,16 +242,24 @@ func (p *ProviderWrapper) initProvider(verbose bool) error {
 		options.Level = hclog.Trace
 	}
 	logger := hclog.New(&options)
-	p.client = plugin.NewClient(
-		&plugin.ClientConfig{
-			Cmd:              exec.Command(providerFilePath),
-			HandshakeConfig:  tfplugin.Handshake,
-			VersionedPlugins: tfplugin.VersionedPlugins,
-			Managed:          true,
-			Logger:           logger,
-			AllowedProtocols: []plugin.Protocol{plugin.ProtocolGRPC},
-			AutoMTLS:         true,
-		})
+	cmd := exec.Command(providerFilePath)
+	var unversionedPlugins plugin.PluginSet
+	if reattach != nil {
+		cmd = nil
+		// github.com/hashicorp/terraform@v1.4.5/internal/command/meta_providers.go/unmanagedProviderFactory
+		unversionedPlugins = tfplugin.VersionedPlugins[reattach.ProtocolVersion]
+	}
+	p.client = plugin.NewClient(&plugin.ClientConfig{
+		Cmd:              cmd,
+		Reattach:         reattach,
+		HandshakeConfig:  tfplugin.Handshake,
+		VersionedPlugins: tfplugin.VersionedPlugins,
+		Plugins:          unversionedPlugins,
+		Managed:          (reattach == nil),
+		Logger:           logger,
+		AllowedProtocols: []plugin.Protocol{plugin.ProtocolGRPC},
+		AutoMTLS:         true,
+	})
 	p.rpcClient, err = p.client.Client()
 	if err != nil {
 		return err
@@ -362,6 +373,55 @@ func getProviderFileNameV12(providerName string) (string, error) {
 	return providerFilePath, nil
 }
 
+func getReattachProviders() *plugin.ReattachConfig {
+	// copied from github.com/hashicorp/terraform@v1.4.5/main.go/parseReattachProviders
+	reattach := os.Getenv("TF_REATTACH_PROVIDERS")
+	if reattach == "" {
+		return nil
+	}
+	type reattachConfig struct {
+		Protocol        string
+		ProtocolVersion int
+		Addr            struct {
+			Network string
+			String  string
+		}
+		Pid  int
+		Test bool
+	}
+	var m map[string]reattachConfig
+	err := encjson.Unmarshal([]byte(reattach), &m)
+	if err != nil {
+		log.Println("Invalid format for TF_REATTACH_PROVIDERS: %w", err)
+	}
+	for p, c := range m {
+		var addr net.Addr
+		switch c.Addr.Network {
+		case "unix":
+			addr, err = net.ResolveUnixAddr("unix", c.Addr.String)
+			if err != nil {
+				log.Printf("Invalid unix socket path %q for %q: %v", c.Addr.String, p, err)
+			}
+		case "tcp":
+			addr, err = net.ResolveTCPAddr("tcp", c.Addr.String)
+			if err != nil {
+				log.Printf("Invalid TCP address %q for %q: %v", c.Addr.String, p, err)
+			}
+		default:
+			log.Printf("Unknown address type %q for %q", c.Addr.Network, p)
+		}
+		// we only care about the first one
+		return &plugin.ReattachConfig{
+			Protocol:        plugin.Protocol(c.Protocol),
+			ProtocolVersion: c.ProtocolVersion,
+			Pid:             c.Pid,
+			Test:            c.Test,
+			Addr:            addr,
+		}
+	}
+	return nil
+}
+
 func GetProviderVersion(providerName string) string {
 	providerFilePath, err := getProviderFileName(providerName)
 	if err != nil {
@@ -389,7 +449,7 @@ func NewDynamicValue(val cty.Value) *tfprotov5.DynamicValue {
 	}
 }
 
-func UnmarshallDynamicValue(val *tfprotov5.DynamicValue, ty cty.Type) (cty.Value, error) {	
+func UnmarshallDynamicValue(val *tfprotov5.DynamicValue, ty cty.Type) (cty.Value, error) {
 	if val == nil {
 		return cty.NullVal(ty), nil
 	}
