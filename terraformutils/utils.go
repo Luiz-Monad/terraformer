@@ -72,7 +72,7 @@ func RefreshResources(resources []*Resource, provider *providerwrapper.ProviderW
 	refreshedResources := []*Resource{}
 	input := make(chan *Resource, len(resources))
 	var wg sync.WaitGroup
-	poolSize := 15
+	poolSize := 1
 	for i := range resources {
 		wg.Add(1)
 		input <- resources[i]
