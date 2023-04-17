@@ -5,6 +5,7 @@ package tfplugin
 import (
 	"context"
 
+	"github.com/GoogleCloudPlatform/terraformer/terraformutils/tfplugin/stoleninternal/configschema"
 	fromproto "github.com/GoogleCloudPlatform/terraformer/terraformutils/tfplugin/stoleninternal/fromproto"
 	proto "github.com/GoogleCloudPlatform/terraformer/terraformutils/tfplugin/stoleninternal/tfplugin5"
 	toproto "github.com/GoogleCloudPlatform/terraformer/terraformutils/tfplugin/stoleninternal/toproto"
@@ -62,6 +63,9 @@ func (c *client) GetProviderSchema(ctx context.Context, req *tfprotov5.GetProvid
 	if err != nil {
 		return nil, err
 	}
+	if w := configschema.WrapDiagnostics(ret.Diagnostics); w.HasError() {
+		return ret, w.ToError()
+	}
 	return ret, nil
 }
 
@@ -78,6 +82,9 @@ func (c *client) PrepareProviderConfig(ctx context.Context, req *tfprotov5.Prepa
 	if err != nil {
 		return nil, err
 	}
+	if w := configschema.WrapDiagnostics(ret.Diagnostics); w.HasError() {
+		return ret, w.ToError()
+	}
 	return ret, nil
 }
 
@@ -93,6 +100,9 @@ func (c *client) ConfigureProvider(ctx context.Context, req *tfprotov5.Configure
 	ret, err := fromproto.ConfigureProviderResponse(resp)
 	if err != nil {
 		return nil, err
+	}
+	if w := configschema.WrapDiagnostics(ret.Diagnostics); w.HasError() {
+		return ret, w.ToError()
 	}
 	return ret, nil
 }
@@ -126,6 +136,9 @@ func (c *client) ValidateDataSourceConfig(ctx context.Context, req *tfprotov5.Va
 	if err != nil {
 		return nil, err
 	}
+	if w := configschema.WrapDiagnostics(ret.Diagnostics); w.HasError() {
+		return ret, w.ToError()
+	}
 	return ret, nil
 }
 
@@ -141,6 +154,9 @@ func (c *client) ReadDataSource(ctx context.Context, req *tfprotov5.ReadDataSour
 	ret, err := fromproto.ReadDataSourceResponse(resp)
 	if err != nil {
 		return nil, err
+	}
+	if w := configschema.WrapDiagnostics(ret.Diagnostics); w.HasError() {
+		return ret, w.ToError()
 	}
 	return ret, nil
 }
@@ -158,6 +174,9 @@ func (c *client) ValidateResourceTypeConfig(ctx context.Context, req *tfprotov5.
 	if err != nil {
 		return nil, err
 	}
+	if w := configschema.WrapDiagnostics(ret.Diagnostics); w.HasError() {
+		return ret, w.ToError()
+	}
 	return ret, nil
 }
 
@@ -173,6 +192,9 @@ func (c *client) UpgradeResourceState(ctx context.Context, req *tfprotov5.Upgrad
 	ret, err := fromproto.UpgradeResourceStateResponse(resp)
 	if err != nil {
 		return nil, err
+	}
+	if w := configschema.WrapDiagnostics(ret.Diagnostics); w.HasError() {
+		return ret, w.ToError()
 	}
 	return ret, nil
 }
@@ -190,6 +212,9 @@ func (c *client) ReadResource(ctx context.Context, req *tfprotov5.ReadResourceRe
 	if err != nil {
 		return nil, err
 	}
+	if w := configschema.WrapDiagnostics(ret.Diagnostics); w.HasError() {
+		return ret, w.ToError()
+	}
 	return ret, nil
 }
 
@@ -205,6 +230,9 @@ func (c *client) PlanResourceChange(ctx context.Context, req *tfprotov5.PlanReso
 	ret, err := fromproto.PlanResourceChangeResponse(resp)
 	if err != nil {
 		return nil, err
+	}
+	if w := configschema.WrapDiagnostics(ret.Diagnostics); w.HasError() {
+		return ret, w.ToError()
 	}
 	return ret, nil
 }
@@ -222,6 +250,9 @@ func (c *client) ApplyResourceChange(ctx context.Context, req *tfprotov5.ApplyRe
 	if err != nil {
 		return nil, err
 	}
+	if w := configschema.WrapDiagnostics(ret.Diagnostics); w.HasError() {
+		return ret, w.ToError()
+	}
 	return ret, nil
 }
 
@@ -237,6 +268,9 @@ func (c *client) ImportResourceState(ctx context.Context, req *tfprotov5.ImportR
 	ret, err := fromproto.ImportResourceStateResponse(resp)
 	if err != nil {
 		return nil, err
+	}
+	if w := configschema.WrapDiagnostics(ret.Diagnostics); w.HasError() {
+		return ret, w.ToError()
 	}
 	return ret, nil
 }

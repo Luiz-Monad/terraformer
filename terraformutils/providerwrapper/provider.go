@@ -280,10 +280,13 @@ func (p *ProviderWrapper) initProvider(verbose bool) error {
 	if err != nil {
 		return err
 	}
-	p.provider.ConfigureProvider(p.context, &tfprotov5.ConfigureProviderRequest{
+	_, err = p.provider.ConfigureProvider(p.context, &tfprotov5.ConfigureProviderRequest{
 		TerraformVersion: "v1.0.0",
 		Config:           NewDynamicValue(config),
 	})
+	if err != nil {
+		return err
+	}
 
 	return nil
 }
