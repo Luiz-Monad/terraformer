@@ -22,6 +22,7 @@ import (
 	"time"
 
 	"github.com/GoogleCloudPlatform/terraformer/terraformutils/providerwrapper"
+	"github.com/GoogleCloudPlatform/terraformer/terraformutils/tfplugin/stoleninternal/configschema"
 	"github.com/hashicorp/go-cty/cty"
 	"github.com/hashicorp/terraform-plugin-sdk/v2/terraform"
 )
@@ -171,7 +172,11 @@ func (r *Resource) ConvertTFstate(provider *providerwrapper.ProviderWrapper) err
 		}
 	}
 	parser := NewFlatmapParser(r.InstanceState.Attributes, ignoreKeys, allowEmptyValues)
-	impliedType := r.InstanceState.RawState.Type()
+	schema, err := provider.GetSchema()
+	if err != nil {
+		return err
+	}
+	impliedType := configschema.WrapBlock(schema.ResourceSchemas[r.InstanceInfo.Type].Block).ImpliedType()
 	return r.ParseTFstate(parser, impliedType)
 }
 

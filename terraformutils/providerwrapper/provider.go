@@ -28,8 +28,10 @@ import (
 
 	"github.com/GoogleCloudPlatform/terraformer/terraformutils/terraformerstring"
 	"github.com/GoogleCloudPlatform/terraformer/terraformutils/tfplugin"
+	"github.com/GoogleCloudPlatform/terraformer/terraformutils/tfplugin/stoleninternal/configschema"
 	"github.com/hashicorp/go-cty/cty"
 	"github.com/hashicorp/go-cty/cty/msgpack"
+	"github.com/hashicorp/go-cty/cty/json"
 	"github.com/hashicorp/go-hclog"
 	"github.com/hashicorp/go-plugin"
 	"github.com/hashicorp/terraform-plugin-go/tfprotov5"
@@ -168,8 +170,7 @@ func (p *ProviderWrapper) Refresh(info *terraform.InstanceInfo, state *terraform
 	if err != nil {
 		return nil, err
 	}
-	impliedTyType := provSchema.ResourceSchemas[info.Type].Block.ValueType()
-	impliedType := state.RawState.Type()
+	impliedType := configschema.WrapBlock(provSchema.ResourceSchemas[info.Type].Block).ImpliedType()
 	priorState, err := state.AttrsAsObjectValue(impliedType)
 	if err != nil {
 		return nil, err
@@ -177,13 +178,9 @@ func (p *ProviderWrapper) Refresh(info *terraform.InstanceInfo, state *terraform
 	successReadResource := false
 	resp := tfprotov5.ReadResourceResponse{}
 	for i := 0; i < p.retryCount; i++ {
-		currentState, err := encodeDynamicValue(impliedTyType, impliedType, priorState)
-		if err != nil {
-			return nil, err
-		}
 		resp, err := p.provider.ReadResource(p.context, &tfprotov5.ReadResourceRequest{
 			TypeName:     info.Type,
-			CurrentState: currentState,
+			CurrentState: NewDynamicValue(priorState),
 			Private:      []byte{},
 		})
 		if err != nil {
@@ -221,7 +218,7 @@ func (p *ProviderWrapper) Refresh(info *terraform.InstanceInfo, state *terraform
 		newState = resp.NewState
 	}
 
-	newStateVal, err := decodeDynamicValue(impliedTyType, impliedType, newState)
+	newStateVal, err := UnmarshallDynamicValue(newState, impliedType)
 	if err != nil {
 		return nil, err
 	}
@@ -268,13 +265,13 @@ func (p *ProviderWrapper) initProvider(verbose bool) error {
 	if err != nil {
 		return err
 	}
-	config, err := encodeDynamicValue(schema.Provider.Block.ValueType(), p.config.Type(), p.config)
+	config, err := configschema.WrapBlock(schema.Provider.Block).CoerceValue(p.config)
 	if err != nil {
 		return err
 	}
 	p.provider.ConfigureProvider(p.context, &tfprotov5.ConfigureProviderRequest{
 		TerraformVersion: "v1.0.0",
-		Config:           config,
+		Config:           NewDynamicValue(config),
 	})
 
 	return nil
@@ -382,42 +379,25 @@ func GetProviderVersion(providerName string) string {
 	return "~> " + strings.TrimPrefix(providerVersion, "v")
 }
 
-func encodeDynamicValue(ty tftypes.Type, ctyTy cty.Type, val cty.Value) (*tfprotov5.DynamicValue, error) {
-
-	metaMP, err := msgpack.Marshal(val, ctyTy)
+func NewDynamicValue(val cty.Value) *tfprotov5.DynamicValue {
+	mp, err := msgpack.Marshal(val, val.Type())
 	if err != nil {
-		return nil, err
+		panic(val)
 	}
-
-	v, err := tftypes.ValueFromMsgPack(metaMP, ty)
-	if err != nil {
-		return nil, err
+	return &tfprotov5.DynamicValue{
+		MsgPack: mp,
 	}
-
-	result, err := tfprotov5.NewDynamicValue(ty, v)
-	if err != nil {
-		return nil, err
-	}
-
-	return &result, nil
 }
 
-func decodeDynamicValue(ty tftypes.Type, ctyTy cty.Type, val *tfprotov5.DynamicValue) (cty.Value, error) {
-
-	v, err := val.Unmarshal(ty)
-	if err != nil {
-		return cty.NullVal(ctyTy), err
+func UnmarshallDynamicValue(val *tfprotov5.DynamicValue, ty cty.Type) (cty.Value, error) {	
+	if val == nil {
+		return cty.NullVal(ty), nil
 	}
-
-	metaMP, err := v.MarshalMsgPack(ty)
-	if err != nil {
-		return cty.NullVal(ctyTy), err
+	switch {
+	case len(val.MsgPack) > 0:
+		return msgpack.Unmarshal(val.MsgPack, ty)
+	case len(val.JSON) > 0:
+		return json.Unmarshal(val.JSON, ty)
 	}
-
-	result, err := msgpack.Unmarshal(metaMP, ctyTy)
-	if err != nil {
-		return cty.NullVal(ctyTy), err
-	}
-
-	return result, nil
+	return cty.NullVal(ty), nil
 }
