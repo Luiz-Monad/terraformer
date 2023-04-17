@@ -36,6 +36,9 @@ type Block struct {
 }
 
 func WrapBlock(b *tfprotov5.SchemaBlock) *Block {
+	if b == nil {
+		return nil
+	}
 	return &Block{*b}
 }
 

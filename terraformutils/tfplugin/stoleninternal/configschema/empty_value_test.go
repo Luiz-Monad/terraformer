@@ -1,7 +1,6 @@
 package configschema
 
 import (
-	"fmt"
 	"testing"
 
 	"github.com/hashicorp/go-cty/cty"
@@ -10,15 +9,15 @@ import (
 )
 
 func TestBlockEmptyValue(t *testing.T) {
-	tests := []struct {
+	tests := map[string]struct {
 		Schema *tfprotov5.SchemaBlock
 		Want   cty.Value
 	}{
-		{
+		"empty": {
 			&tfprotov5.SchemaBlock{},
 			cty.EmptyObjectVal,
 		},
-		{
+		"str attr": {
 			&tfprotov5.SchemaBlock{
 				Attributes: []*tfprotov5.SchemaAttribute{
 					{
@@ -32,7 +31,7 @@ func TestBlockEmptyValue(t *testing.T) {
 				"str": cty.NullVal(cty.String),
 			}),
 		},
-		{
+		"nested str attr": {
 			&tfprotov5.SchemaBlock{
 				BlockTypes: []*tfprotov5.SchemaNestedBlock{
 					{
@@ -56,7 +55,7 @@ func TestBlockEmptyValue(t *testing.T) {
 				})),
 			}),
 		},
-		{
+		"group": {
 			&tfprotov5.SchemaBlock{
 				BlockTypes: []*tfprotov5.SchemaNestedBlock{
 					{
@@ -80,7 +79,7 @@ func TestBlockEmptyValue(t *testing.T) {
 				}),
 			}),
 		},
-		{
+		"list": {
 			&tfprotov5.SchemaBlock{
 				BlockTypes: []*tfprotov5.SchemaNestedBlock{
 					{
@@ -104,7 +103,7 @@ func TestBlockEmptyValue(t *testing.T) {
 				})),
 			}),
 		},
-		{
+		"list dynamic": {
 			&tfprotov5.SchemaBlock{
 				BlockTypes: []*tfprotov5.SchemaNestedBlock{
 					{
@@ -126,7 +125,7 @@ func TestBlockEmptyValue(t *testing.T) {
 				"list_dynamic": cty.EmptyTupleVal,
 			}),
 		},
-		{
+		"map": {
 			&tfprotov5.SchemaBlock{
 				BlockTypes: []*tfprotov5.SchemaNestedBlock{
 					{
@@ -150,7 +149,7 @@ func TestBlockEmptyValue(t *testing.T) {
 				})),
 			}),
 		},
-		{
+		"map dynamic": {
 			&tfprotov5.SchemaBlock{
 				BlockTypes: []*tfprotov5.SchemaNestedBlock{
 					{
@@ -172,7 +171,7 @@ func TestBlockEmptyValue(t *testing.T) {
 				"map_dynamic": cty.EmptyObjectVal,
 			}),
 		},
-		{
+		"set": {
 			&tfprotov5.SchemaBlock{
 				BlockTypes: []*tfprotov5.SchemaNestedBlock{
 					{
@@ -198,8 +197,8 @@ func TestBlockEmptyValue(t *testing.T) {
 		},
 	}
 
-	for _, test := range tests {
-		t.Run(fmt.Sprintf("%#v", test.Schema), func(t *testing.T) {
+	for name, test := range tests {
+		t.Run(name, func(t *testing.T) {
 			got := WrapBlock(test.Schema).EmptyValue()
 			if !test.Want.RawEquals(got) {
 				t.Errorf("wrong result\nschema: %#v\ngot: %#v\nwant: %#v", test.Schema, got, test.Want)
