@@ -20,7 +20,6 @@ import (
 	"os"
 	"sort"
 	"strings"
-	"sync"
 
 	"github.com/GoogleCloudPlatform/terraformer/terraformutils/terraformerstring"
 
@@ -151,22 +150,25 @@ func initOptionsAndWrapper(provider terraformutils.ProviderGenerator, options Im
 }
 
 func initAllServicesResources(providersMapping *terraformutils.ProvidersMapping, options ImportOptions, args []string, providerWrapper *providerwrapper.ProviderWrapper) error {
-	numOfResources := len(options.Resources)
-	var wg sync.WaitGroup
-	wg.Add(numOfResources)
-
-	var failedServices []string
 
 	for _, service := range options.Resources {
-		serviceProvider := providersMapping.AddServiceToProvider(service)
+		providersMapping.AddServiceToProvider(service)
+	}
+
+	failedServices, err := terraformutils.DoWorkPooled(options.Resources, 16, func(service string) (*string, error) {
+		serviceProvider := providersMapping.MatchService(service)
 		err := serviceProvider.Init(args)
 		if err != nil {
-			return err
+			return nil, err // cancel the entire pool and return
 		}
 		err = initServiceResources(service, serviceProvider, options, providerWrapper)
 		if err != nil {
-			failedServices = append(failedServices, service)
+			return &service, nil
 		}
+		return nil, nil //continue
+	})
+	if err != nil {
+		return err
 	}
 
 	// remove providers that failed to init their service

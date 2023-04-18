@@ -16,6 +16,7 @@ package terraformutils
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -69,35 +70,21 @@ func PrintTfState(resources []Resource) ([]byte, error) {
 }
 
 func RefreshResources(resources []*Resource, provider *providerwrapper.ProviderWrapper, slowProcessingResources [][]*Resource) ([]*Resource, error) {
-	refreshedResources := []*Resource{}
-	input := make(chan *Resource, len(resources))
-	var wg sync.WaitGroup
-	poolSize := 1
-	for i := range resources {
-		wg.Add(1)
-		input <- resources[i]
-	}
-	close(input)
 
-	for i := 0; i < poolSize; i++ {
-		go RefreshResourceWorker(input, &wg, provider)
-	}
+	DoWorkPooled(resources, 16, func(resource *Resource) (**Resource, error) {
+		RefreshResource(resource, provider)
+		return nil, nil //continue regardless
+	})
 
-	spInputs := []chan *Resource{}
-	for i, resourceGroup := range slowProcessingResources {
-		spInputs = append(spInputs, make(chan *Resource, len(resourceGroup)))
-		for j := range resourceGroup {
-			spInputs[i] <- resourceGroup[j]
+	DoWorkPooled(slowProcessingResources, len(slowProcessingResources), func(resources []*Resource) (*[]*Resource, error) {
+		for _, resource := range resources {
+			RefreshResource(resource, provider)
 		}
-		close(spInputs[i])
-	}
+		return nil, nil //continue regardless
+	})
 
-	for i := 0; i < len(spInputs); i++ {
-		wg.Add(len(slowProcessingResources[i]))
-		go RefreshResourceWorker(spInputs[i], &wg, provider)
-	}
+	refreshedResources := []*Resource{}
 
-	wg.Wait()
 	for _, r := range resources {
 		if r.InstanceState != nil && r.InstanceState.ID != "" {
 			refreshedResources = append(refreshedResources, r)
@@ -107,8 +94,7 @@ func RefreshResources(resources []*Resource, provider *providerwrapper.ProviderW
 	}
 
 	for _, resourceGroup := range slowProcessingResources {
-		for i := range resourceGroup {
-			r := resourceGroup[i]
+		for _, r := range resourceGroup {
 			if r.InstanceState != nil && r.InstanceState.ID != "" {
 				refreshedResources = append(refreshedResources, r)
 			} else {
@@ -150,12 +136,9 @@ func RefreshResourcesByProvider(providersMapping *ProvidersMapping, providerWrap
 	return nil
 }
 
-func RefreshResourceWorker(input chan *Resource, wg *sync.WaitGroup, provider *providerwrapper.ProviderWrapper) {
-	for r := range input {
-		log.Println("Refreshing state...", r.InstanceInfo.Id)
-		r.Refresh(provider)
-		wg.Done()
-	}
+func RefreshResource(r *Resource, provider *providerwrapper.ProviderWrapper) {
+	log.Println("Refreshing state...", r.InstanceInfo.Id)
+	r.Refresh(provider)
 }
 
 func IgnoreKeys(resourcesTypes []string, p *providerwrapper.ProviderWrapper) map[string][]string {
@@ -271,4 +254,75 @@ func writeState(d *terraform.State, dst io.Writer) error {
 	}
 
 	return nil
+}
+
+func DoWorkPooled[T any](items []T, poolSize int, task func(T) (*T, error)) ([]T, error) {
+	if poolSize == 0 { // 0 means sequential
+		output := []T{}
+		for _, item := range items {
+			if out, err := task(item); err != nil {
+				return output, err
+			} else {
+				if out != nil {
+					output = append(output, *out)
+				}
+			}
+		}
+		return output, nil
+	}
+
+	numOfItems := len(items)
+	input := make(chan T, numOfItems)
+	output := make(chan T, numOfItems)
+	errout := make(chan error, 1)
+	var wg sync.WaitGroup
+	wg.Add(numOfItems)
+	for _, item := range items {
+		input <- item
+	}
+	close(input)
+
+	ctx, cancel := context.WithCancel(context.Background())
+
+	for i := 0; i < poolSize; i++ {
+		go func() {
+			for {
+				select {
+				case item, ok := <-input:
+					if !ok {
+						// Input is empty
+						return
+					}
+					if out, err := task(item); err != nil {
+						errout <- err
+						cancel()
+					} else {
+						if out != nil {
+							output <- *out
+						}
+						wg.Done()
+					}
+				case <-ctx.Done():
+					// Context cancelled, exit early
+					return
+				}
+			}
+		}()
+	}
+
+	wg.Wait()
+	cancel()
+	close(output)
+	close(errout)
+
+	itemsout := []T{}
+	for out := range output {
+		itemsout = append(itemsout, out)
+	}
+
+	err, haserr := <-errout
+	if haserr {
+		return itemsout, err
+	}
+	return itemsout, nil
 }

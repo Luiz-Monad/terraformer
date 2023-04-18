@@ -109,6 +109,10 @@ func (p *ProvidersMapping) ProcessResources(isCleanup bool) {
 	}
 }
 
+func (p *ProvidersMapping) MatchService(service string) ProviderGenerator {
+	return p.serviceToProvider[service]
+}
+
 func (p *ProvidersMapping) MatchProvider(resource *Resource) ProviderGenerator {
 	return p.resourceToProvider[resource]
 }
