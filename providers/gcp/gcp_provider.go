@@ -19,6 +19,7 @@ import (
 	"errors"
 	"log"
 	"os"
+	"sync"
 
 	"github.com/GoogleCloudPlatform/terraformer/terraformutils"
 	"google.golang.org/api/compute/v1"
@@ -100,7 +101,10 @@ func (p *GCPProvider) InitService(serviceName string, verbose bool) error {
 }
 
 // GetGCPSupportService return map of support service for GCP
+var lock = sync.Mutex{}
 func (p *GCPProvider) GetSupportedService() map[string]terraformutils.ServiceGenerator {
+	lock.Lock()
+	defer lock.Unlock()
 	services := ComputeServices
 	services["bigQuery"] = &GCPFacade{service: &BigQueryGenerator{}}
 	services["cloudFunctions"] = &GCPFacade{service: &CloudFunctionsGenerator{}}

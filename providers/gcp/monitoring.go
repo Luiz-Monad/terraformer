@@ -46,14 +46,20 @@ func (g *MonitoringGenerator) loadAlerts(ctx context.Context, project string) er
 
 	alertIterator := client.ListAlertPolicies(ctx, req)
 
+	var lastErr error
 	for {
 		alert, err := alertIterator.Next()
 		if err == iterator.Done {
 			break
 		}
 		if err != nil {
-			log.Println("error with alert:", err)
-			continue
+			if err != lastErr {
+				log.Println("error with alert:", err)
+				lastErr = err
+				continue
+			} else {
+				return nil
+			}
 		}
 		g.Resources = append(g.Resources, terraformutils.NewResource(
 			alert.Name,
@@ -82,14 +88,21 @@ func (g *MonitoringGenerator) loadGroups(ctx context.Context, project string) er
 	}
 
 	groupsIterator := client.ListGroups(ctx, req)
+
+	var lastErr error
 	for {
 		group, err := groupsIterator.Next()
 		if err == iterator.Done {
 			break
 		}
 		if err != nil {
-			log.Println("error with group:", err)
-			continue
+			if err != lastErr {
+				log.Println("error with group:", err)
+				lastErr = err
+				continue
+			} else {
+				return nil
+			}
 		}
 		g.Resources = append(g.Resources, terraformutils.NewResource(
 			group.Name,
@@ -118,14 +131,21 @@ func (g *MonitoringGenerator) loadNotificationChannel(ctx context.Context, proje
 	}
 
 	notificationChannelIterator := client.ListNotificationChannels(ctx, req)
+
+	var lastErr error
 	for {
 		notificationChannel, err := notificationChannelIterator.Next()
 		if err == iterator.Done {
 			break
 		}
 		if err != nil {
-			log.Println("error with notification Channel:", err)
-			continue
+			if err != lastErr {
+				log.Println("error with notification Channel:", err)
+				lastErr = err
+				continue
+			} else {
+				return nil
+			}
 		}
 		g.Resources = append(g.Resources, terraformutils.NewResource(
 			notificationChannel.Name,
@@ -153,14 +173,21 @@ func (g *MonitoringGenerator) loadUptimeCheck(ctx context.Context, project strin
 	}
 
 	uptimeCheckConfigsIterator := client.ListUptimeCheckConfigs(ctx, req)
+
+	var lastErr error
 	for {
 		uptimeCheckConfigs, err := uptimeCheckConfigsIterator.Next()
 		if err == iterator.Done {
 			break
 		}
 		if err != nil {
-			log.Println("error with uptimeCheckConfigs:", err)
-			continue
+			if err != lastErr {
+				log.Println("error with uptimeCheckConfigs:", err)
+				lastErr = err
+				continue
+			} else {
+				return nil
+			}
 		}
 		g.Resources = append(g.Resources, terraformutils.NewResource(
 			uptimeCheckConfigs.Name,
